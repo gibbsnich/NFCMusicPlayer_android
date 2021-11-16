@@ -12,6 +12,10 @@ import android.os.PowerManager
 
 import com.revosleap.samplemusicplayer.ui.activities.MainActivity
 import com.revosleap.samplemusicplayer.models.Song
+import com.revosleap.samplemusicplayer.ui.blueprints.MainActivityBluePrint
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
@@ -61,6 +65,15 @@ class MediaPlayerHolder(private val mMusicService: MusicService?) :
         mAudioManager = mContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     }
 
+    var musicEntryDao: MainActivityBluePrint.MusicEntryDao? = null
+    var dirEntryDao: MainActivityBluePrint.DirEntryDao? = null
+
+    override fun setDaos(mEntryDao: MainActivityBluePrint.MusicEntryDao,
+                dEntryDao: MainActivityBluePrint.DirEntryDao) {
+        musicEntryDao = mEntryDao
+        dirEntryDao = dEntryDao
+    }
+
     private fun registerActionsReceiver() {
         mNotificationActionsReceiver = NotificationReceiver()
         val intentFilter = IntentFilter()
@@ -100,10 +113,34 @@ class MediaPlayerHolder(private val mMusicService: MusicService?) :
         return mSelectedSong
     }
 
+    override fun getCurrentDuration(): Int {
+        return mMediaPlayer!!.duration
+    }
 
     override fun setCurrentSong(song: Song, songs: List<Song>) {
+        storeCurrentPositionAndIndex()
+
         mSelectedSong = song
         mSongs = songs
+
+        val nkey = mSelectedSong!!.albumName
+
+        val dirEntry = dirEntryDao!!.getLastPosition(nkey)
+        if (dirEntry != null) {
+            songs.forEach { if (it.trackNumber == dirEntry.entryId) mSelectedSong = it }
+            initMediaPlayer()
+            if (dirEntry.position!!.toInt() != 0) {
+                mMediaPlayer!!.seekTo(dirEntry.position!!.toInt())
+            }
+        } else {
+            val musicEntry = musicEntryDao!!.loadMusicEntry(nkey)
+            initMediaPlayer()
+            if (musicEntry.position!!.toInt() != 0) {
+                mMediaPlayer!!.seekTo(musicEntry.position!!.toInt())
+            }
+        }
+        //mMediaPlayer!!.start()
+        setStatus(PlaybackInfoListener.State.PLAYING)
     }
 
     override fun onCompletion(mediaPlayer: MediaPlayer) {
@@ -169,7 +206,24 @@ class MediaPlayerHolder(private val mMusicService: MusicService?) :
         }
     }
 
+    override fun storeCurrentPositionAndIndex() {
+        if (isPlaying()) {
+            val currentPosition = mMediaPlayer!!.currentPosition
+            //val currentIndex = mSongs!!.indexOf(mSelectedSong)
+
+            val nkey = mSelectedSong!!.albumName
+            val entryId = mSelectedSong!!.trackNumber
+            GlobalScope.launch(Dispatchers.IO) {
+                dirEntryDao!!.resetPositions(nkey)
+                musicEntryDao!!.updatePosition(nkey, Integer(currentPosition))
+                dirEntryDao!!.updatePosition(nkey, entryId, currentPosition)
+            }
+        }
+    }
+
     private fun pauseMediaPlayer() {
+        storeCurrentPositionAndIndex()
+
         setStatus(PlaybackInfoListener.State.PAUSED)
         mMediaPlayer!!.pause()
         mMusicService!!.stopForeground(false)
@@ -262,7 +316,6 @@ class MediaPlayerHolder(private val mMusicService: MusicService?) :
         }
 
     }
-
 
     override fun getMediaPlayer(): MediaPlayer? {
         return mMediaPlayer

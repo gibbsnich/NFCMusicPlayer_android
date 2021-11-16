@@ -21,9 +21,11 @@ class MusicService : Service() {
     }
 
     override fun onDestroy() {
-        mediaPlayerHolder!!.registerNotificationActionsReceiver(false)
-        musicNotificationManager = null
-        mediaPlayerHolder!!.release()
+        if (mediaPlayerHolder != null) {
+            mediaPlayerHolder!!.registerNotificationActionsReceiver(false)
+            musicNotificationManager = null
+            mediaPlayerHolder!!.release()
+        }
         super.onDestroy()
     }
 
