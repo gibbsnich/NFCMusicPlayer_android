@@ -387,8 +387,10 @@ class MainActivity : MainActivityBluePrint(), View.OnClickListener, RecyclerAdap
         }
 
         override fun onPlaybackCompleted() {
-            //After playback is complete
-            //todo update position (= 0) in MusicEntry DB for current track
+            GlobalScope.launch(Dispatchers.IO) {
+                dirEntryDao!!.resetPositions(currentTagPayload!!)
+                musicEntryDao!!.updatePosition(currentTagPayload!!, Integer(0))
+            }
         }
     }
 
@@ -402,9 +404,6 @@ class MainActivity : MainActivityBluePrint(), View.OnClickListener, RecyclerAdap
             if (mEntry != null) {
                 if (mEntry.path.equals("STOP")) {
                     if (mPlayerAdapter!!.isPlaying()) {
-                        //todo also store current track index if a directory is currently playing
-                        //mPlayerAdapter!!.getPlayerPosition()
-
                         mPlayerAdapter!!.storeCurrentPositionAndIndex()
                         mPlayerAdapter!!.resumeOrPause()
                     }
@@ -592,7 +591,7 @@ class MainActivity : MainActivityBluePrint(), View.OnClickListener, RecyclerAdap
 
                     mediaFiles = File(filePath.toString()).listFiles { file ->
                         file.name.lowercase().endsWith(".mp3")
-                    }
+                    }.sortedArray()
                 } else {
                     if (uri != null && "content" == uri.getScheme()) {
                         filePath = getPathFromUri(this, uri).toString()
